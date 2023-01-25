@@ -1,6 +1,8 @@
+import { print } from "./basic_load.js"
+
 async function hello() {
     return new Promise((res, _rej) => {
-        Deno.core.print("Hello world\n");
+        print("Hello world\n");
         res("Rust: hello");
     });
 }
