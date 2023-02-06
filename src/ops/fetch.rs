@@ -1,4 +1,4 @@
-use std::{cell::RefCell, rc::Rc, str::FromStr};
+use std::{cell::RefCell, ops::Deref, rc::Rc, str::FromStr};
 
 use deno_core::{
     error::AnyError, include_js_files, op, ByteString, Extension, OpState, ZeroCopyBuf,
@@ -7,7 +7,7 @@ use reqwest::{
     header::{HeaderName, HeaderValue},
     Method, Url,
 };
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -67,16 +67,40 @@ async fn op_fetch(state: Rc<RefCell<OpState>>, args: FetchArgs) -> Result<FetchR
     })
 }
 
+#[op]
+fn op_decode_utf8<T>(buf: T) -> Result<String, AnyError>
+where
+    T: DeserializeOwned + Deref<Target = [u8]>,
+{
+    Ok(String::from_utf8_lossy(&*buf).into())
+}
+
 pub fn init() -> Extension {
     Extension::builder()
         .js(include_js_files!(
             prefix "fetch",
             "fetch.js",
         ))
-        .ops(vec![op_fetch::decl()])
+        .ops(vec![
+            op_fetch::decl(),
+            op_decode_utf8::decl::<ZeroCopyBuf>(),
+        ])
         .state(move |state| {
             state.put::<reqwest::Client>(reqwest::Client::new());
             Ok(())
         })
         .build()
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn op_decode_utf8_should_word() {
+        let v = b"hello".to_vec();
+        let res = op_decode_utf8::call(v).unwrap();
+        assert_eq!(res, "hello")
+    }
 }
